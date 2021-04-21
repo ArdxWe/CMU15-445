@@ -13,6 +13,7 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 
 namespace bustub {
 
@@ -23,7 +24,7 @@ template <typename T>
 class Matrix {
  protected:
   // TODO(P0): Add implementation
-  Matrix(int r, int c):  rows{r}, cols{c}, linear{new int[r*c]} {}
+  Matrix(int r, int c) : rows{r}, cols{c}, linear{new int[r * c]} {}
 
   // # of rows in the matrix
   int rows;
@@ -51,18 +52,16 @@ class Matrix {
   virtual void MatImport(T *arr) = 0;
 
   // TODO(P0): Add implementation
-  virtual ~Matrix() {
-    delete [] linear;
-  }
+  virtual ~Matrix() { delete[] linear; }
 };
 
 template <typename T>
 class RowMatrix : public Matrix<T> {
  public:
   // TODO(P0): Add implementation
-  RowMatrix(int r, int c) : Matrix<T>(r, c), data_{new T*[r]} {
+  RowMatrix(int r, int c) : Matrix<T>(r, c), data_{new T *[r]} {
     for (int i = 0; i < r; i++) {
-      data_[i]  = this->linear + i * c;
+      data_[i] = this->linear + i * c;
     }
   }
 
@@ -76,9 +75,7 @@ class RowMatrix : public Matrix<T> {
   T GetElem(int i, int j) override { return data_[i][j]; }
 
   // TODO(P0): Add implementation
-  void SetElem(int i, int j, T val) override {
-    data_[i][j] = val;
-  }
+  void SetElem(int i, int j, T val) override { data_[i][j] = val; }
 
   // TODO(P0): Add implementation
   void MatImport(T *arr) override {
@@ -88,9 +85,7 @@ class RowMatrix : public Matrix<T> {
   }
 
   // TODO(P0): Add implementation
-  ~RowMatrix() override {
-    delete [] data_;
-  }
+  ~RowMatrix() override { delete[] data_; }
 
  private:
   // 2D array containing the elements of the matrix in row-major format
@@ -109,11 +104,10 @@ class RowMatrixOperations {
                                                    std::unique_ptr<RowMatrix<T>> mat2) {
     // TODO(P0): Add code
     if (mat1 == nullptr || mat2 == nullptr) {
-      return std::unique_ptr<RowMatrix<T>> { nullptr };
+      return std::unique_ptr<RowMatrix<T>>{nullptr};
     }
-    if (mat1->GetRows() != mat2->GetRows() ||
-        mat2->GetColumns() != mat2->GetColumns()) {
-      return std::unique_ptr<RowMatrix<T>> { nullptr };
+    if (mat1->GetRows() != mat2->GetRows() || mat2->GetColumns() != mat2->GetColumns()) {
+      return std::unique_ptr<RowMatrix<T>>{nullptr};
     }
 
     int rows = mat1->GetRows();
@@ -133,10 +127,10 @@ class RowMatrixOperations {
                                                         std::unique_ptr<RowMatrix<T>> mat2) {
     // TODO(P0): Add code
     if (mat1 == nullptr || mat2 == nullptr) {
-      return std::unique_ptr<RowMatrix<T>> { nullptr };
+      return std::unique_ptr<RowMatrix<T>>{nullptr};
     }
-    if (mat1->GetColumns() != mat2->GetRows()){
-      return std::unique_ptr<RowMatrix<T>> { nullptr };
+    if (mat1->GetColumns() != mat2->GetRows()) {
+      return std::unique_ptr<RowMatrix<T>>{nullptr};
     }
 
     int rows = mat1->GetRows();
