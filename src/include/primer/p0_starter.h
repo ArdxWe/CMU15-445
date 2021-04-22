@@ -103,10 +103,10 @@ class RowMatrixOperations {
   static std::unique_ptr<RowMatrix<T>> AddMatrices(std::unique_ptr<RowMatrix<T>> mat1,
                                                    std::unique_ptr<RowMatrix<T>> mat2) {
     // TODO(P0): Add code
-    if (mat1 == nullptr || mat2 == nullptr) {
+    if (!mat1 || !mat2) {
       return std::unique_ptr<RowMatrix<T>>{nullptr};
     }
-    if (mat1->GetRows() != mat2->GetRows() || mat2->GetColumns() != mat2->GetColumns()) {
+    if (mat1->GetRows() != mat2->GetRows() || mat1->GetColumns() != mat2->GetColumns()) {
       return std::unique_ptr<RowMatrix<T>>{nullptr};
     }
 
@@ -126,7 +126,7 @@ class RowMatrixOperations {
   static std::unique_ptr<RowMatrix<T>> MultiplyMatrices(std::unique_ptr<RowMatrix<T>> mat1,
                                                         std::unique_ptr<RowMatrix<T>> mat2) {
     // TODO(P0): Add code
-    if (mat1 == nullptr || mat2 == nullptr) {
+    if (!mat1 || !mat2) {
       return std::unique_ptr<RowMatrix<T>>{nullptr};
     }
     if (mat1->GetColumns() != mat2->GetRows()) {
@@ -136,7 +136,7 @@ class RowMatrixOperations {
     int rows = mat1->GetRows();
     int columns = mat1->GetColumns();
     int columns_2 = mat2->GetColumns();
-    std::unique_ptr<RowMatrix<T>> res{new RowMatrix<T>(rows, columns)};
+    std::unique_ptr<RowMatrix<T>> res{new RowMatrix<T>(rows, columns_2)};
     for (int i = 0; i < rows; i++) {
       for (int j = 0; j < columns_2; j++) {
         int value = 0;
@@ -156,7 +156,6 @@ class RowMatrixOperations {
                                                     std::unique_ptr<RowMatrix<T>> matC) {
     // TODO(P0): Add code
     std::unique_ptr<RowMatrix<T>> res = MultiplyMatrices(std::move(matA), std::move(matB));
-
     return AddMatrices(std::move(res), std::move(matC));
   }
 };
