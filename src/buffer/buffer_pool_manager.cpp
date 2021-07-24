@@ -14,14 +14,13 @@
 
 namespace bustub {
 namespace {
-using std::hash;
 using std::lock_guard;
 using std::mutex;
 using std::string;
 };  // namespace
 
 BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager, LogManager *log_manager)
-    : pool_size_(pool_size), disk_manager_(disk_manager), log_manager_(log_manager), hash_(pool_size) {
+    : pool_size_(pool_size), disk_manager_(disk_manager), log_manager_(log_manager) {
   // We allocate a consecutive memory space for the buffer pool.
   pages_ = new Page[pool_size_];
   replacer_ = new LRUReplacer(pool_size);
@@ -29,8 +28,6 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   // Initially, every page is in the free list.
   for (size_t i = 0; i < pool_size_; ++i) {
     free_list_.emplace_back(static_cast<int>(i));
-    // init hash.
-    hash_[i] = hash<string>{}(string{(pages_ + i)->GetData(), PAGE_SIZE});
   }
 }
 
@@ -209,11 +206,7 @@ void BufferPoolManager::FlushAllPagesImpl() {
 }
 
 void BufferPoolManager::write_disk(frame_id_t f_id, Page *page) {
-  size_t new_hash = hash<string>{}(string{page->GetData(), PAGE_SIZE});
-  if (new_hash != hash_[f_id]) {
-    disk_manager_->WritePage(page->GetPageId(), page->GetData());
-    hash_[f_id] = new_hash;
-  }
+  disk_manager_->WritePage(page->GetPageId(), page->GetData());
 }
 
 }  // namespace bustub
