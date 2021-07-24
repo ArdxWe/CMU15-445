@@ -48,7 +48,7 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
 
   auto iterator = page_table_.find(page_id);
   if (iterator != page_table_.end()) {
-    if ((pages_ + iterator->second)->GetPageId() == page_id) {
+    if ((pages_ + iterator->second)->page_id_ == page_id) {
       ((pages_ + iterator->second)->pin_count_)++;
       replacer_->Pin(iterator->second);
       return pages_ + iterator->second;
@@ -65,19 +65,19 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
     if (!replacer_->Victim(&f_id)) {
       return nullptr;
     } else {
-      assert((pages_ + f_id)->GetPageId() != INVALID_PAGE_ID);
+      assert((pages_ + f_id)->page_id_ != INVALID_PAGE_ID);
     }
   }
 
   // lazy write.
-  if ((pages_ + f_id)->GetPageId() != INVALID_PAGE_ID) {
-    page_table_.erase((pages_ + f_id)->GetPageId());
+  if ((pages_ + f_id)->page_id_ != INVALID_PAGE_ID) {
+    page_table_.erase((pages_ + f_id)->page_id_);
     if ((pages_ + f_id)->IsDirty()) {
-      write_disk(f_id, pages_ + f_id);
+      disk_manager_->WritePage((pages_ + f_id)->page_id_, (pages_ + f_id)->data_);
     }
   }
 
-  disk_manager_->ReadPage(page_id, (pages_ + f_id)->GetData());
+  disk_manager_->ReadPage(page_id, (pages_ + f_id)->data_);
 
   (pages_ + f_id)->page_id_ = page_id;
   (pages_ + f_id)->is_dirty_ = false;
@@ -94,7 +94,7 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
   if (iterator == page_table_.end()) {
     return true;
   }
-  if ((pages_ + iterator->second)->GetPageId() != page_id) {
+  if ((pages_ + iterator->second)->page_id_ != page_id) {
     page_table_.erase(iterator->first);
     return true;
   }
@@ -107,7 +107,7 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
     // pin count == 0, then remove from page table.
     if ((pages_ + iterator->second)->pin_count_ == 0) {
       if ((pages_ + iterator->second)->is_dirty_) {
-        write_disk(iterator->second, pages_ + iterator->second);
+        disk_manager_->WritePage((pages_ + iterator->second)->page_id_, (pages_ + iterator->second)->data_);
       }
       replacer_->Unpin(iterator->second);
     }
@@ -123,11 +123,11 @@ bool BufferPoolManager::FlushPageImpl(page_id_t page_id) {
   if (iterator == page_table_.end()) {
     return false;
   }
-  if ((pages_ + iterator->second)->GetPageId() != page_id) {
+  if ((pages_ + iterator->second)->page_id_ != page_id) {
     return false;
   }
 
-  write_disk(iterator->second, pages_ + iterator->second);
+  disk_manager_->WritePage((pages_ + iterator->second)->page_id_, (pages_ + iterator->second)->data_);
   (pages_ + iterator->second)->is_dirty_ = false;
   return true;
 }
@@ -149,11 +149,11 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
       return nullptr;
     }
   }
-  if ((pages_ + f_id)->GetPageId() != INVALID_PAGE_ID) {
+  if ((pages_ + f_id)->page_id_ != INVALID_PAGE_ID) {
     if ((pages_ + f_id)->IsDirty()) {
-      write_disk(f_id, pages_ + f_id);
+      disk_manager_->WritePage((pages_ + f_id)->page_id_, (pages_ + f_id)->data_);
     }
-    page_table_.erase((pages_ + f_id)->GetPageId());
+    page_table_.erase((pages_ + f_id)->page_id_);
   }
 
   *page_id = disk_manager_->AllocatePage();
@@ -179,7 +179,7 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
   bool flag = false;
   if (iterator == page_table_.end()) {
     flag = true;
-  } else if ((pages_ + iterator->second)->GetPageId() != page_id) {
+  } else if ((pages_ + iterator->second)->page_id_ != page_id) {
     flag = true;
   } else {
     if ((pages_ + iterator->second)->pin_count_ != 0) {
@@ -199,14 +199,10 @@ void BufferPoolManager::FlushAllPagesImpl() {
   lock_guard<mutex> lock{latch_};
 
   for (size_t i = 0; i < pool_size_; i++) {
-    if ((pages_ + i)->GetPageId() != INVALID_PAGE_ID) {
-      write_disk(i, pages_ + i);
+    if ((pages_ + i)->page_id_ != INVALID_PAGE_ID) {
+      disk_manager_->WritePage((pages_ + i)->page_id_, (pages_ + i)->data_);
     }
   }
-}
-
-void BufferPoolManager::write_disk(frame_id_t f_id, Page *page) {
-  disk_manager_->WritePage(page->GetPageId(), page->GetData());
 }
 
 }  // namespace bustub
