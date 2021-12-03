@@ -13,6 +13,8 @@
  * For range scan of b+ tree
  */
 #pragma once
+#include <cassert>
+
 #include "storage/page/b_plus_tree_leaf_page.h"
 
 namespace bustub {
@@ -24,20 +26,41 @@ class IndexIterator {
  public:
   // you may define your own constructor based on your member variables
   IndexIterator();
-  ~IndexIterator() = default;
+  IndexIterator(B_PLUS_TREE_LEAF_PAGE_TYPE *leaf, int index, BufferPoolManager *BufferPoolManager);
+  ~IndexIterator();
+  bool isEnd() { return (leaf_ == nullptr) || (index_ >= leaf_->GetSize()); }
 
-  bool isEnd();
+  const MappingType &operator*() {
+    assert(leaf_ != nullptr);
 
-  const MappingType &operator*();
+    return leaf_->GetItem(index_);
+  }
 
-  IndexIterator &operator++();
+  IndexIterator &operator++() {
+    index_++;
+    if (index_ >= leaf_->GetSize()) {
+      page_id_t next = leaf_->GetNextPageId();
+      if (next == INVALID_PAGE_ID) {
+        leaf_ = nullptr;
+      } else {
+        bufferPoolManager_->UnpinPage(leaf_->GetPageId(), false);
+        Page *page = bufferPoolManager_->FetchPage(next);
+        leaf_ = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(page->GetData());
+        index_ = 0;
+      }
+    }
+    return *this;
+  }
 
-  bool operator==(const IndexIterator &itr) const { throw std::runtime_error("unimplemented"); }
+  bool operator==(const IndexIterator &itr) const { return this->leaf_ == itr.leaf_; }
 
-  bool operator!=(const IndexIterator &itr) const { throw std::runtime_error("unimplemented"); }
+  bool operator!=(const IndexIterator &itr) const { return this->leaf_ != itr.leaf_; }
 
  private:
   // add your own private member variables here
+  int index_ = 0;
+  B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_ = nullptr;
+  BufferPoolManager *bufferPoolManager_ = nullptr;
 };
 
 }  // namespace bustub

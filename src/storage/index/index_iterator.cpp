@@ -15,13 +15,15 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator() = default;
 
 INDEX_TEMPLATE_ARGUMENTS
-bool INDEXITERATOR_TYPE::isEnd() { throw std::runtime_error("unimplemented"); }
+INDEXITERATOR_TYPE::IndexIterator(B_PLUS_TREE_LEAF_PAGE_TYPE *leaf, int index, BufferPoolManager *bufferPoolManager)
+    : index_(index), leaf_(leaf), bufferPoolManager_(bufferPoolManager) {}
 
 INDEX_TEMPLATE_ARGUMENTS
-const MappingType &INDEXITERATOR_TYPE::operator*() { throw std::runtime_error("unimplemented"); }
-
-INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE &INDEXITERATOR_TYPE::operator++() { throw std::runtime_error("unimplemented"); }
+INDEXITERATOR_TYPE::~IndexIterator() {
+  if (leaf_ != nullptr) {
+    bufferPoolManager_->UnpinPage(leaf_->GetPageId(), false);
+  }
+}
 
 template class IndexIterator<GenericKey<4>, RID, GenericComparator<4>>;
 

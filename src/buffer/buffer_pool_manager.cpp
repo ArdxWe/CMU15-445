@@ -64,9 +64,8 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   } else {
     if (!replacer_->Victim(&f_id)) {
       return nullptr;
-    } else {
-      assert((pages_ + f_id)->page_id_ != INVALID_PAGE_ID);
     }
+    assert((pages_ + f_id)->page_id_ != INVALID_PAGE_ID);
   }
 
   // lazy write.

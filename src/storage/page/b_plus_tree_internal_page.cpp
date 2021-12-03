@@ -25,34 +25,43 @@ namespace bustub {
  * max page size
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, int max_size) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, int max_size) {
+  SetPageType(IndexPageType::INTERNAL_PAGE);
+  SetSize(0);
+  SetPageId(page_id);
+  SetParentPageId(parent_id);
+  SetMaxSize(max_size);
+}
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
  * array offset)
  */
 INDEX_TEMPLATE_ARGUMENTS
-KeyType B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const {
-  // replace with your own code
-  KeyType key{};
-  return key;
-}
+KeyType B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const { return array[index].first; }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) { array[index].first = key; }
 
 /*
  * Helper method to find and return array index(or offset), so that its value
  * equals to input "value"
  */
 INDEX_TEMPLATE_ARGUMENTS
-int B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const { return 0; }
+int B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const {
+  for (int i = 0; i < this->GetSize(); i++) {
+    if (ValueAt(i) == value) {
+      return i;
+    }
+  }
+  return -1;
+}
 
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
  * offset)
  */
 INDEX_TEMPLATE_ARGUMENTS
-ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const { return 0; }
+ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const { return array[index].second; }
 
 /*****************************************************************************
  * LOOKUP
@@ -64,7 +73,20 @@ ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const { return 0; }
  */
 INDEX_TEMPLATE_ARGUMENTS
 ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key, const KeyComparator &comparator) const {
-  return INVALID_PAGE_ID;
+  assert(GetSize() > 1);
+  int start = 1;            // start from second key
+  int end = GetSize() - 1;  // end index
+
+  while (start <= end) {
+    int mid = (end - start) / 2 + start;
+    if (comparator(array[mid].first, key) <= 0) {
+      start = mid + 1;
+    } else {
+      end = mid - 1;
+    }
+  }
+
+  return array[start - 1].second;
 }
 
 /*****************************************************************************
@@ -78,7 +100,13 @@ ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key, const KeyCo
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PopulateNewRoot(const ValueType &old_value, const KeyType &new_key,
-                                                     const ValueType &new_value) {}
+                                                     const ValueType &new_value) {
+  array[0].second = old_value;
+  array[1].first = new_key;
+  array[1].second = new_value;
+
+  SetSize(2);
+}
 /*
  * Insert new_key & new_value pair right after the pair with its value ==
  * old_value
@@ -87,7 +115,17 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PopulateNewRoot(const ValueType &old_value,
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertNodeAfter(const ValueType &old_value, const KeyType &new_key,
                                                     const ValueType &new_value) {
-  return 0;
+  int idx = ValueIndex(old_value) + 1;
+  assert(idx > 0);
+  IncreaseSize(1);
+  int curSize = GetSize();
+  for (int i = curSize - 1; i > idx; i--) {
+    array[i].first = array[i - 1].first;
+    array[i].second = array[i - 1].second;
+  }
+  array[idx].first = new_key;
+  array[idx].second = new_value;
+  return curSize;
 }
 
 /*****************************************************************************
@@ -98,7 +136,26 @@ int B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertNodeAfter(const ValueType &old_value, 
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(BPlusTreeInternalPage *recipient,
-                                                BufferPoolManager *buffer_pool_manager) {}
+                                                BufferPoolManager *buffer_pool_manager) {
+  assert(recipient != nullptr);
+  int total = GetMaxSize() + 1;
+  assert(GetSize() == total);
+  // copy last half
+  int copyIdx = total / 2;  // max:4 x,1,2,3,4 -> 2,3,4
+  page_id_t recipPageId = recipient->GetPageId();
+  for (int i = copyIdx; i < total; i++) {
+    recipient->array[i - copyIdx].first = array[i].first;
+    recipient->array[i - copyIdx].second = array[i].second;
+    // update children's parent page
+    auto childRawPage = buffer_pool_manager->FetchPage(array[i].second);
+    BPlusTreePage *childTreePage = reinterpret_cast<BPlusTreePage *>(childRawPage->GetData());
+    childTreePage->SetParentPageId(recipPageId);
+    buffer_pool_manager->UnpinPage(array[i].second, true);
+  }
+  // set size,is odd, bigger is last part
+  SetSize(copyIdx);
+  recipient->SetSize(total - copyIdx);
+}
 
 /* Copy entries into me, starting from {items} and copy {size} entries.
  * Since it is an internal page, for all entries (pages) moved, their parents page now changes to me.
