@@ -52,9 +52,13 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) { next_pa
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::KeyIndex(const KeyType &key, const KeyComparator &comparator) const {
   assert(GetSize() >= 0);
+
+  // leaf page start from zero
   int st = 0;
   int ed = GetSize() - 1;
-  while (st <= ed) {  // find the last key in array <= input
+
+  // find the last key in array < input
+  while (st <= ed) {
     int mid = (ed - st) / 2 + st;
     if (comparator(array[mid].first, key) >= 0) {
       ed = mid - 1;
@@ -62,6 +66,8 @@ int B_PLUS_TREE_LEAF_PAGE_TYPE::KeyIndex(const KeyType &key, const KeyComparator
       st = mid + 1;
     }
   }
+
+  // the first >= key
   return ed + 1;
 }
 
@@ -88,8 +94,11 @@ const MappingType &B_PLUS_TREE_LEAF_PAGE_TYPE::GetItem(int index) { return array
  */
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) {
-  int idx = KeyIndex(key, comparator);  // first larger than key
+  int idx = KeyIndex(key, comparator);
+
   assert(idx >= 0);
+
+  // insert, we don't care split in this
   IncreaseSize(1);
   int curSize = GetSize();
   for (int i = curSize - 1; i > idx; i--) {
@@ -98,6 +107,7 @@ int B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &valu
   }
   array[idx].first = key;
   array[idx].second = value;
+
   return curSize;
 }
 
@@ -113,15 +123,17 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveHalfTo(BPlusTreeLeafPage *recipient, Buffer
   int total = GetMaxSize();
   assert(GetSize() == total);
   // copy last half
-  int copyIdx = total / 2;  // 7 is 4,5,6,7; 8 is 4,5,6,7,8
+  int copyIdx = total / 2;  // 7 is 4, 5, 6, 7; 8 is 5, 6, 7, 8
   for (int i = copyIdx; i < total; i++) {
     recipient->array[i - copyIdx].first = array[i].first;
     recipient->array[i - copyIdx].second = array[i].second;
   }
-  // set pointer
+
+  // link
   recipient->SetNextPageId(GetNextPageId());
   SetNextPageId(recipient->GetPageId());
-  // set size, is odd, bigger is last part
+
+  // copyIdx <= total - copyIdx
   SetSize(copyIdx);
   recipient->SetSize(total - copyIdx);
 }

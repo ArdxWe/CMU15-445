@@ -37,7 +37,7 @@ class Page {
   ~Page() = default;
 
   /** @return the actual data contained within this page */
-  inline char *GetData() { return data_; }
+  inline char *GetData() { return data_; }  // default is inline
 
   /** @return the page id of this page */
   inline page_id_t GetPageId() { return page_id_; }
@@ -67,6 +67,7 @@ class Page {
   inline void SetLSN(lsn_t lsn) { memcpy(GetData() + OFFSET_LSN, &lsn, sizeof(lsn_t)); }
 
  protected:
+  // int32_t is four bytes, should we use compiler check ?
   static_assert(sizeof(page_id_t) == 4);
   static_assert(sizeof(lsn_t) == 4);
 

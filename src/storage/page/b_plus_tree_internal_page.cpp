@@ -74,9 +74,12 @@ ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const { return arra
 INDEX_TEMPLATE_ARGUMENTS
 ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key, const KeyComparator &comparator) const {
   assert(GetSize() > 1);
-  int start = 1;            // start from second key
-  int end = GetSize() - 1;  // end index
 
+  // start from second key
+  int start = 1;
+  int end = GetSize() - 1;
+
+  // find the first key > key
   while (start <= end) {
     int mid = (end - start) / 2 + start;
     if (comparator(array[mid].first, key) <= 0) {
@@ -86,6 +89,7 @@ ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key, const KeyCo
     }
   }
 
+  // the last <= key
   return array[start - 1].second;
 }
 
@@ -116,7 +120,11 @@ INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertNodeAfter(const ValueType &old_value, const KeyType &new_key,
                                                     const ValueType &new_value) {
   int idx = ValueIndex(old_value) + 1;
+
+  // old_value should be exist
   assert(idx > 0);
+
+  // insert
   IncreaseSize(1);
   int curSize = GetSize();
   for (int i = curSize - 1; i > idx; i--) {
@@ -125,6 +133,7 @@ int B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertNodeAfter(const ValueType &old_value, 
   }
   array[idx].first = new_key;
   array[idx].second = new_value;
+
   return curSize;
 }
 
@@ -138,6 +147,7 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(BPlusTreeInternalPage *recipient,
                                                 BufferPoolManager *buffer_pool_manager) {
   assert(recipient != nullptr);
+
   int total = GetMaxSize() + 1;
   assert(GetSize() == total);
   // copy last half

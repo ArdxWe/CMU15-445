@@ -21,17 +21,18 @@ namespace bustub {
  */
 bool HeaderPage::InsertRecord(const std::string &name, const page_id_t root_id) {
   assert(name.length() < 32);
-  assert(root_id > INVALID_PAGE_ID);
+  assert(root_id > INVALID_PAGE_ID);  // >= 0
 
   int record_num = GetRecordCount();
+  // sizeof(record_num) + ( sizeof(name) + sizeof(root_id) ) * record_num
   int offset = 4 + record_num * 36;
   // check for duplicate name
   if (FindRecord(name) != -1) {
     return false;
   }
   // copy record content
-  memcpy(GetData() + offset, name.c_str(), (name.length() + 1));
-  memcpy((GetData() + offset + 32), &root_id, 4);
+  memcpy(GetData() + offset, name.c_str(), (name.length() + 1));  // fill name
+  memcpy((GetData() + offset + 32), &root_id, 4);                 // fill root_id
 
   SetRecordCount(record_num + 1);
   return true;
@@ -42,7 +43,7 @@ bool HeaderPage::DeleteRecord(const std::string &name) {
   assert(record_num > 0);
 
   int index = FindRecord(name);
-  // record does not exsit
+  // record does not exist
   if (index == -1) {
     return false;
   }
@@ -57,7 +58,7 @@ bool HeaderPage::UpdateRecord(const std::string &name, const page_id_t root_id) 
   assert(name.length() < 32);
 
   int index = FindRecord(name);
-  // record does not exsit
+  // record does not exist
   if (index == -1) {
     return false;
   }
@@ -72,7 +73,7 @@ bool HeaderPage::GetRootId(const std::string &name, page_id_t *root_id) {
   assert(name.length() < 32);
 
   int index = FindRecord(name);
-  // record does not exsit
+  // record does not exist
   if (index == -1) {
     return false;
   }
