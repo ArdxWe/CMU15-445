@@ -11,6 +11,7 @@
 
 #include <iostream>
 #include <string>
+#include <utility>
 
 #include "common/exception.h"
 #include "common/rid.h"
@@ -46,9 +47,10 @@ bool BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   // find leaf page
   LeafPage *target = reinterpret_cast<LeafPage *>(FindLeafPage(key, transaction));
 
-  result->resize(1);
+  ValueType v;
   // find value
-  auto ret = target->Lookup(key, &((*result)[0]), comparator_);
+  auto ret = target->Lookup(key, &v, comparator_);
+  result->push_back(v);
 
   // unpin page
   buffer_pool_manager_->UnpinPage(target->GetPageId(), false);
