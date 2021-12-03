@@ -32,10 +32,14 @@ static char *buffer_used;
 DiskManager::DiskManager(const std::string &db_file)
     : file_name_(db_file), next_page_id_(0), num_flushes_(0), num_writes_(0), flush_log_(false), flush_log_f_(nullptr) {
   std::string::size_type n = file_name_.rfind('.');
+
+  // ardxwe: file should has .
   if (n == std::string::npos) {
     LOG_DEBUG("wrong file format");
     return;
   }
+
+  // change with *.log
   log_name_ = file_name_.substr(0, n) + ".log";
 
   log_io_.open(log_name_, std::ios::binary | std::ios::in | std::ios::app | std::ios::out);
@@ -43,6 +47,7 @@ DiskManager::DiskManager(const std::string &db_file)
   if (!log_io_.is_open()) {
     log_io_.clear();
     // create a new file
+    // maybe it's wrong, prev has proved try to create file.
     log_io_.open(log_name_, std::ios::binary | std::ios::trunc | std::ios::app | std::ios::out);
     log_io_.close();
     // reopen with original mode
@@ -80,17 +85,19 @@ void DiskManager::ShutDown() {
  * Write the contents of the specified page into disk file
  */
 void DiskManager::WritePage(page_id_t page_id, const char *page_data) {
-  size_t offset = static_cast<size_t>(page_id) * PAGE_SIZE;
+  size_t offset = static_cast<size_t>(page_id) * PAGE_SIZE;  // page_id is just offset
   // set write cursor to offset
-  num_writes_ += 1;
+  num_writes_ += 1;  // counts
   db_io_.seekp(offset);
-  db_io_.write(page_data, PAGE_SIZE);
+  db_io_.write(page_data, PAGE_SIZE);  // cover old bits
   // check for I/O error
+  // why error ?
   if (db_io_.bad()) {
     LOG_DEBUG("I/O error while writing");
     return;
   }
   // needs to flush to keep disk file in sync
+  // write to disk
   db_io_.flush();
 }
 
@@ -105,6 +112,7 @@ void DiskManager::ReadPage(page_id_t page_id, char *page_data) {
     // std::cerr << "I/O error while reading" << std::endl;
   } else {
     // set read cursor to offset
+    // cpp is amazing
     db_io_.seekp(offset);
     db_io_.read(page_data, PAGE_SIZE);
     if (db_io_.bad()) {
@@ -112,6 +120,7 @@ void DiskManager::ReadPage(page_id_t page_id, char *page_data) {
       return;
     }
     // if file ends before reading PAGE_SIZE
+    // maybe we should throw exception
     int read_count = db_io_.gcount();
     if (read_count < PAGE_SIZE) {
       LOG_DEBUG("Read less than a page");
@@ -135,7 +144,7 @@ void DiskManager::WriteLog(char *log_data, int size) {
     return;
   }
 
-  flush_log_ = true;
+  flush_log_ = true;  // for crash
 
   if (flush_log_f_ != nullptr) {
     // used for checking non-blocking flushing
@@ -176,6 +185,7 @@ bool DiskManager::ReadLog(char *log_data, int size, int offset) {
   }
   // if log file ends before reading "size"
   int read_count = log_io_.gcount();
+  // maybe we should throw exception
   if (read_count < size) {
     log_io_.clear();
     memset(log_data + read_count, 0, size - read_count);
