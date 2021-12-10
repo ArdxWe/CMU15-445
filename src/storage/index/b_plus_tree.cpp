@@ -9,6 +9,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cassert>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -26,7 +27,7 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, BufferPoolManager *buffer_pool_manag
       root_page_id_(INVALID_PAGE_ID),
       buffer_pool_manager_(buffer_pool_manager),
       comparator_(comparator),
-      leaf_max_size_(leaf_max_size),
+      leaf_max_size_(leaf_max_size - 1),
       internal_max_size_(internal_max_size) {}
 
 /*
@@ -131,12 +132,12 @@ bool BPLUSTREE_TYPE::InsertIntoLeaf(const KeyType &key, const ValueType &value, 
 
   int cur_size = leafPage->Insert(key, value, comparator_);
 
-  // after we insert into leaf page, if size == maxsize, we should split
-  if (cur_size == leafPage->GetMaxSize()) {
+  // after we insert into leaf page, if size > maxsize, we should split
+  if (cur_size == leafPage->GetMaxSize() + 1) {
     LeafPage *newLeafPage = Split<LeafPage>(leafPage);
 
     // set max size
-    newLeafPage->SetMaxSize(leaf_max_size_);
+    newLeafPage->SetMaxSize(leaf_max_size_ - 1);
     InsertIntoParent(leafPage, newLeafPage->KeyAt(0), newLeafPage, transaction);
   }
   buffer_pool_manager_->UnpinPage(leafPage->GetPageId(), true);
@@ -229,13 +230,29 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &ke
  *****************************************************************************/
 /*
  * Delete key & value pair associated with input key
- * If current tree is empty, return immdiately.
+ * If current tree is empty, return immediately.
  * If not, User needs to first find the right leaf page as deletion target, then
  * delete entry from leaf page. Remember to deal with redistribute or merge if
  * necessary.
  */
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {}
+void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
+  // b plus tree is empty
+  if (IsEmpty()) {
+    return;
+  }
+
+  // get target leaf page
+  LeafPage *deleteTarget = reinterpret_cast<LeafPage *>(FindLeafPage(key));
+
+  int nowSize = deleteTarget->RemoveAndDeleteRecord(key, comparator_);
+
+  if (nowSize < deleteTarget->GetMinSize()) {
+    CoalesceOrRedistribute<LeafPage>(deleteTarget, transaction);
+  }
+
+  buffer_pool_manager_->UnpinPage(deleteTarget->GetPageId(), true);
+}
 
 /*
  * User needs to first find the sibling of input page. If sibling's size + input
@@ -247,6 +264,43 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {}
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
 bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
+  // node is root
+  // case 1: node is leaf, min size = 1, so now size should be 0
+  // case 2: node is internal, min size = 2, so now size should be 1
+  if (node->IsRootPage()) {
+    return AdjustRoot(node);
+  }
+
+  N *otherNode = nullptr;
+
+  bool nPrev = FindSibling(node, &otherNode);
+
+  auto *parent = FetchPage(node->GetParentPageId());
+
+  InternalPage *parentPage = reinterpret_cast<InternalPage *>(parent);
+
+  // for leaf page and internal page, max size = max size
+  if (node->GetSize() + otherNode->GetSize() <= node->GetMaxSize()) {
+    // other node, node
+    if (nPrev) {
+      N *temp = node;
+      node = otherNode;
+      otherNode = temp;
+    }
+
+    // parent remove index
+    int removeIndex = parentPage->ValueIndex(node->GetPageId());
+
+    // has unpin all
+    Coalesce(&otherNode, &node, &parentPage, removeIndex, transaction);
+    return true;
+  }
+
+  int nodeInParentIndex = parentPage->ValueIndex(node->GetPageId());
+  Redistribute(otherNode, node, nodeInParentIndex);
+
+  buffer_pool_manager_->UnpinPage(parentPage->GetPageId(), false);
+
   return false;
 }
 
@@ -267,6 +321,20 @@ template <typename N>
 bool BPLUSTREE_TYPE::Coalesce(N **neighbor_node, N **node,
                               BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> **parent, int index,
                               Transaction *transaction) {
+  // ensure we could coalesce
+  assert((*neighbor_node)->GetSize() + (*node)->GetSize() <= (*node)->GetMaxSize());
+
+  // unpin neighbor_node
+  (*node)->MoveAllTo(*neighbor_node, (*parent)->KeyAt(index), buffer_pool_manager_);
+
+  buffer_pool_manager_->UnpinPage((*node)->GetPageId(), true);
+  buffer_pool_manager_->DeletePage((*node)->GetPageId());
+
+  (*parent)->Remove(index);
+  if ((*parent)->GetSize() < (*parent)->GetMinSize()) {
+    return CoalesceOrRedistribute<InternalPage>(*parent, transaction);
+  }
+
   return false;
 }
 
@@ -281,7 +349,44 @@ bool BPLUSTREE_TYPE::Coalesce(N **neighbor_node, N **node,
  */
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
-void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {}
+void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {
+  if (index == 0) {
+    // order: node neighbor_node
+    neighbor_node->MoveFirstToEndOf(node, buffer_pool_manager_);
+  } else {
+    // order: neighbor_node node
+    neighbor_node->MoveLastToFrontOf(node, buffer_pool_manager_);
+  }
+  buffer_pool_manager_->UnpinPage(node->GetPageId(), true);
+  buffer_pool_manager_->UnpinPage(neighbor_node->GetPageId(), true);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+template <typename N>
+bool BPLUSTREE_TYPE::FindSibling(N *node, N **sibling_pointer /* output */) {
+  auto *page = FetchPage(node->GetParentPageId());
+  InternalPage *parent = reinterpret_cast<InternalPage *>(page);
+
+  // index value is point to node
+  int index = parent->ValueIndex(node->GetPageId());
+
+  // prev
+  int siblingIndex = index - 1;
+
+  // no prev
+  if (index == 0) {
+    // next (internal should bigger than 0)
+    siblingIndex = 1;
+  }
+
+  // output
+  *sibling_pointer = reinterpret_cast<N *>(FetchPage(parent->ValueAt(siblingIndex)));
+
+  buffer_pool_manager_->UnpinPage(parent->GetPageId(), false);
+
+  // node, sibling ?
+  return index == 0;
+}
 /*
  * Update root page if necessary
  * NOTE: size of root page can be less than min size and this method is only
@@ -293,7 +398,59 @@ void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {}
  * happend
  */
 INDEX_TEMPLATE_ARGUMENTS
-bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) { return false; }
+bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) {
+  if (old_root_node->IsLeafPage()) {
+    // case 2
+
+    // root and leaf page min size == 1
+    // so now size should be 0
+    assert(old_root_node->GetSize() == 0);
+
+    // this node should be parent !
+    assert(old_root_node->GetParentPageId() == INVALID_PAGE_ID);
+
+    // remove empty page
+    buffer_pool_manager_->UnpinPage(old_root_node->GetPageId(),
+                                    true /* will delete this page, so true or false is OK */);
+    buffer_pool_manager_->DeletePage(old_root_node->GetPageId());
+
+    // update root page
+    root_page_id_ = INVALID_PAGE_ID;
+
+    // update header page record instead of insert.
+    UpdateRootPageId();
+
+    // empty, should delete root page
+    return true;
+  }
+
+  // root and internal page min size == 2
+  // so now size should be 1
+  assert(old_root_node->GetSize() == 1);
+
+  InternalPage *root = reinterpret_cast<InternalPage *>(old_root_node);
+
+  // only child id should be new root page id
+  page_id_t newRoot = root->RemoveAndReturnOnlyChild();
+  root_page_id_ = newRoot;
+  UpdateRootPageId();
+
+  auto *page = buffer_pool_manager_->FetchPage(root_page_id_);
+
+  // ensure logic is right
+  assert(page != nullptr);
+
+  // set parent page id of new root page is invalid
+  root = reinterpret_cast<InternalPage *>(page->GetData());
+  root->SetParentPageId(INVALID_PAGE_ID);
+
+  buffer_pool_manager_->UnpinPage(root_page_id_, true);
+  buffer_pool_manager_->UnpinPage(old_root_node->GetPageId(), true /* false is ok */);
+  buffer_pool_manager_->DeletePage(old_root_node->GetPageId());
+
+  // now we have valid root page, so don't need delete root page
+  return false;
+}
 
 /*****************************************************************************
  * INDEX ITERATOR

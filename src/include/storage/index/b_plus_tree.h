@@ -100,6 +100,9 @@ class BPlusTree {
   template <typename N>
   void Redistribute(N *neighbor_node, N *node, int index);
 
+  template <typename N>
+  bool FindSibling(N *node, N **sibling_pointer);
+
   bool AdjustRoot(BPlusTreePage *node);
 
   void UpdateRootPageId(int insert_record = 0);

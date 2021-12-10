@@ -13,6 +13,7 @@
 
 #include "common/exception.h"
 #include "common/rid.h"
+#include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
 
 namespace bustub {
@@ -120,7 +121,7 @@ int B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &valu
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveHalfTo(BPlusTreeLeafPage *recipient, BufferPoolManager *bufferPoolManager) {
   assert(recipient != nullptr);
-  int total = GetMaxSize();
+  int total = GetMaxSize() + 1;
   assert(GetSize() == total);
   // copy last half
   int copyIdx = total / 2;  // 7 is 4, 5, 6, 7; 8 is 5, 6, 7, 8
@@ -173,7 +174,25 @@ bool B_PLUS_TREE_LEAF_PAGE_TYPE::Lookup(const KeyType &key, ValueType *value, co
  * @return   page size after deletion
  */
 INDEX_TEMPLATE_ARGUMENTS
-int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(const KeyType &key, const KeyComparator &comparator) { return 0; }
+int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(const KeyType &key, const KeyComparator &comparator) {
+  // >=
+  int index = KeyIndex(key, comparator);
+
+  // >
+  if (index >= GetSize() || comparator(key, KeyAt(index)) != 0) {
+    return GetSize();
+  }
+
+  // =, remove
+  for (size_t i = index; i < static_cast<size_t>(GetSize() - 1); i++) {
+    array[i].first = array[i + 1].first;
+    array[i].second = array[i + 1].second;
+  }
+
+  IncreaseSize(-1);
+
+  return GetSize();
+}
 
 /*****************************************************************************
  * MERGE
@@ -183,7 +202,25 @@ int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(const KeyType &key, const 
  * to update the next_page id in the sibling page
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveAllTo(BPlusTreeLeafPage *recipient) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveAllTo(BPlusTreeLeafPage *recipient, const KeyType &middle_key,
+                                           BufferPoolManager *buffer_pool_manager) {
+  assert(recipient != nullptr);
+  assert(GetSize() + recipient->GetSize() <= recipient->GetMaxSize());
+
+  int startIdx = recipient->GetSize();  // 7 is 4, 5, 6, 7; 8 is 4, 5, 6, 7, 8
+  for (int i = 0; i < GetSize(); i++) {
+    recipient->array[startIdx + i].first = array[i].first;
+    recipient->array[startIdx + i].second = array[i].second;
+  }
+
+  (recipient->array[startIdx]).first = middle_key;
+
+  // set next page
+  recipient->SetNextPageId(GetNextPageId());
+  // set size, is odd, bigger is last part
+  recipient->IncreaseSize(GetSize());
+  SetSize(0);
+}
 
 /*****************************************************************************
  * REDISTRIBUTE
@@ -192,19 +229,44 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveAllTo(BPlusTreeLeafPage *recipient) {}
  * Remove the first key & value pair from this page to "recipient" page.
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveFirstToEndOf(BPlusTreeLeafPage *recipient) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveFirstToEndOf(BPlusTreeLeafPage *recipient,
+                                                  BufferPoolManager *buffer_pool_manager) {
+  MappingType pair = GetItem(0);
+  IncreaseSize(-1);
+
+  for (size_t i = 0; i < static_cast<size_t>(GetSize() - 1); i++) {
+    array[i].first = array[i + 1].first;
+    array[i].second = array[i + 1].second;
+  }
+
+  recipient->CopyLastFrom(pair);
+
+  // update parent
+  auto *page = buffer_pool_manager->FetchPage(GetParentPageId());
+  BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *parent =
+      reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(page->GetData());
+
+  // parent key should >= value page min key
+  parent->SetKeyAt(parent->ValueIndex(GetPageId()), array[0].first);
+  buffer_pool_manager->UnpinPage(GetParentPageId(), true);
+}
 
 /*
  * Copy the item into the end of my item list. (Append item to my array)
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyLastFrom(const MappingType &item) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyLastFrom(const MappingType &item) {
+  assert(GetSize() + 1 <= GetMaxSize());
+  array[GetSize()] = item;
+  IncreaseSize(1);
+}
 
 /*
  * Remove the last key & value pair from this page to "recipient" page.
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveLastToFrontOf(BPlusTreeLeafPage *recipient) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveLastToFrontOf(BPlusTreeLeafPage *recipient,
+                                                   BufferPoolManager *buffer_pool_manager) {}
 
 /*
  * Insert item at the front of my items. Move items accordingly.
