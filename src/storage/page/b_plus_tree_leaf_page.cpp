@@ -96,6 +96,7 @@ const MappingType &B_PLUS_TREE_LEAF_PAGE_TYPE::GetItem(int index) { return array
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) {
   int idx = KeyIndex(key, comparator);
+  // std::cout << "insert " << std::endl;
 
   assert(idx >= 0);
 

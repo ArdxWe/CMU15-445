@@ -13,6 +13,7 @@
 #include <queue>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "concurrency/transaction.h"
 #include "storage/index/index_iterator.h"
@@ -77,7 +78,8 @@ class BPlusTree {
   // read data from file and remove one by one
   void RemoveFromFile(const std::string &file_name, Transaction *transaction = nullptr);
   // expose for test purpose
-  Page *FindLeafPage(const KeyType &key, bool leftMost = false);
+  Page *FindLeafPage(const KeyType &key, bool leftMost = false, OpType op = OpType::READ,
+                     Transaction *transaction = nullptr);
 
  private:
   void StartNewTree(const KeyType &key, const ValueType &value);
@@ -88,7 +90,7 @@ class BPlusTree {
                         Transaction *transaction = nullptr);
 
   template <typename N>
-  N *Split(N *node);
+  N *Split(N *node, Transaction *transaction);
 
   template <typename N>
   bool CoalesceOrRedistribute(N *node, Transaction *transaction = nullptr);
@@ -101,7 +103,7 @@ class BPlusTree {
   void Redistribute(N *neighbor_node, N *node, int index);
 
   template <typename N>
-  bool FindSibling(N *node, N **sibling_pointer);
+  bool FindSibling(N *node, N **sibling_pointer, Transaction *transaction);
 
   bool AdjustRoot(BPlusTreePage *node);
 
@@ -114,6 +116,52 @@ class BPlusTree {
 
   BPlusTreePage *FetchPage(page_id_t page_id);
 
+  BPlusTreePage *CrabingProtocalFetchPage(page_id_t page_id, OpType op, page_id_t previous, Transaction *transaction);
+
+  void FreePagesInTransaction(bool write, Transaction *transaction, page_id_t cur = -1);
+
+  inline void Lock(bool exclusive, Page *page) {
+    // std::cout << "LOCK" << std::endl;
+    if (exclusive) {
+      page->WLatch();
+    } else {
+      page->RLatch();
+    }
+  }
+
+  inline void Unlock(bool exclusive, Page *page) {
+    // std::cout << "un LOCK" << std::endl;
+    if (exclusive) {
+      page->WUnlatch();
+    } else {
+      page->RUnlatch();
+    }
+  }
+  inline void Unlock(bool exclusive, page_id_t pageId) {
+    auto page = buffer_pool_manager_->FetchPage(pageId);
+    Unlock(exclusive, page);
+    buffer_pool_manager_->UnpinPage(pageId, exclusive);
+  }
+  inline void LockRootPageId(bool exclusive) {
+    if (exclusive) {
+      mutex_.WLock();
+    } else {
+      mutex_.RLock();
+    }
+    rootLockedCnt++;
+  }
+
+  inline void TryUnlockRootPageId(bool exclusive) {
+    if (rootLockedCnt > 0) {
+      if (exclusive) {
+        mutex_.WUnlock();
+      } else {
+        mutex_.RUnlock();
+      }
+      rootLockedCnt--;
+    }
+  }
+
   // member variable
   std::string index_name_;
   page_id_t root_page_id_;
@@ -121,6 +169,9 @@ class BPlusTree {
   KeyComparator comparator_;
   int leaf_max_size_;
   int internal_max_size_;
+
+  ReaderWriterLatch mutex_;
+  static thread_local int rootLockedCnt;
 };
 
 }  // namespace bustub

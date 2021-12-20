@@ -245,8 +245,6 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveAllTo(BPlusTreeInternalPage *recipient,
   assert(recipient->GetSize() <= GetMaxSize());
 
   SetSize(0);
-
-  buffer_pool_manager->UnpinPage(recipPageId, true);
 }
 
 /*****************************************************************************

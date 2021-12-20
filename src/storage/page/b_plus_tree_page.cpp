@@ -9,6 +9,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cassert>
+
 #include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
@@ -69,5 +71,26 @@ void BPlusTreePage::SetPageId(page_id_t page_id) { page_id_ = page_id; }
  * Helper methods to set lsn
  */
 void BPlusTreePage::SetLSN(lsn_t lsn) { lsn_ = lsn; }
+
+// for concurrent index
+bool BPlusTreePage::IsSafe(OpType op) {
+  int size = GetSize();
+
+  if (op == OpType::INSERT) {
+    return size < GetMaxSize();
+  }
+
+  int minSize = GetMinSize() + 1;
+  if (op == OpType::DELETE) {
+    if (IsLeafPage()) {
+      return size >= minSize;
+    }
+
+    // size include key[0], but min size doesn't include
+    return size > minSize;
+  }
+
+  assert(false);
+}
 
 }  // namespace bustub

@@ -40,11 +40,13 @@ class IndexIterator {
     index_++;
     if (index_ >= leaf_->GetSize()) {
       page_id_t next = leaf_->GetNextPageId();
+      UnlockAndUnPin();
+
       if (next == INVALID_PAGE_ID) {
         leaf_ = nullptr;
       } else {
-        bufferPoolManager_->UnpinPage(leaf_->GetPageId(), false);
         Page *page = bufferPoolManager_->FetchPage(next);
+        page->RLatch();
         leaf_ = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(page->GetData());
         index_ = 0;
       }
@@ -57,6 +59,11 @@ class IndexIterator {
   bool operator!=(const IndexIterator &itr) const { return this->leaf_ != itr.leaf_; }
 
  private:
+  void UnlockAndUnPin() {
+    bufferPoolManager_->FetchPage(leaf_->GetPageId())->RUnlatch();
+    bufferPoolManager_->UnpinPage(leaf_->GetPageId(), false);
+  }
+
   // add your own private member variables here
   int index_ = 0;
   B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_ = nullptr;

@@ -10,10 +10,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cassert>
+#include <iostream>
+
 #include "buffer/buffer_pool_manager.h"
 
 namespace bustub {
 namespace {
+using std::cout;
+using std::endl;
 using std::lock_guard;
 using std::mutex;
 using std::string;
@@ -111,6 +116,11 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
       replacer_->Unpin(iterator->second);
     }
     flag = true;
+  } else {
+    // for cocurrent index test, unpin pincount should > 0
+    cout << "Unpin error: " << (pages_ + iterator->second)->GetPageId() << endl;
+    assert(false);
+    return false;
   }
   return flag;
 }
@@ -176,6 +186,12 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
   disk_manager_->DeallocatePage(page_id);
   auto iterator = page_table_.find(page_id);
   bool flag = false;
+
+  if ((pages_ + iterator->second)->GetPinCount() > 0) {
+    cout << "Delete error: " << iterator->second << endl;
+    assert(false);
+    return false;
+  }
   if (iterator == page_table_.end()) {
     flag = true;
   } else if ((pages_ + iterator->second)->page_id_ != page_id) {
