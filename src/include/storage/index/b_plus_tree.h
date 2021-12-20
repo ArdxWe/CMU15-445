@@ -10,10 +10,10 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <iostream>
 #include <queue>
 #include <string>
 #include <vector>
-#include <iostream>
 
 #include "concurrency/transaction.h"
 #include "storage/index/index_iterator.h"

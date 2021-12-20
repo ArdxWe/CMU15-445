@@ -50,7 +50,7 @@ bool BPLUSTREE_TYPE::IsEmpty() const { return root_page_id_ == INVALID_PAGE_ID; 
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) {
   // find leaf page
-  LeafPage *target = reinterpret_cast<LeafPage *>(FindLeafPage(key,false,OpType::READ,transaction));
+  LeafPage *target = reinterpret_cast<LeafPage *>(FindLeafPage(key, false, OpType::READ, transaction));
 
   ValueType v;
   // find value
@@ -151,7 +151,7 @@ bool BPLUSTREE_TYPE::InsertIntoLeaf(const KeyType &key, const ValueType &value, 
     newLeafPage->SetMaxSize(leaf_max_size_ - 1);
     InsertIntoParent(leafPage, newLeafPage->KeyAt(0), newLeafPage, transaction);
   }
-  
+
   FreePagesInTransaction(true, transaction);
   return true;
 }
@@ -284,8 +284,10 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
   // case 1: node is leaf, min size = 1, so now size should be 0
   // case 2: node is internal, min size = 2, so now size should be 1
   if (node->IsRootPage()) {
-    bool delOldRoot = AdjustRoot(node);//make the child of N the new root of the tree and delete N
-    if (delOldRoot) {transaction->AddIntoDeletedPageSet(node->GetPageId());}
+    bool delOldRoot = AdjustRoot(node);  // make the child of N the new root of the tree and delete N
+    if (delOldRoot) {
+      transaction->AddIntoDeletedPageSet(node->GetPageId());
+    }
     return delOldRoot;
   }
 
@@ -521,7 +523,8 @@ Page *BPLUSTREE_TYPE::FindLeafPage(const KeyType &key, bool leftMost, OpType op,
 
   // get leaf page
   page_id_t next = INVALID_PAGE_ID;
-  for (page_id_t cur = root_page_id_; !pointer->IsLeafPage(); pointer = CrabingProtocalFetchPage(next,op,cur,transaction), cur = next) {
+  for (page_id_t cur = root_page_id_; !pointer->IsLeafPage();
+       pointer = CrabingProtocalFetchPage(next, op, cur, transaction), cur = next) {
     InternalPage *internalPage = reinterpret_cast<InternalPage *>(pointer);
     if (leftMost) {
       next = internalPage->ValueAt(0);
@@ -549,7 +552,7 @@ BPlusTreePage *BPLUSTREE_TYPE::CrabingProtocalFetchPage(page_id_t page_id, OpTyp
   auto *page = buffer_pool_manager_->FetchPage(page_id);
   // std::cout << "CrabingProtocalFetchPage" << std::endl;
   Lock(write, page);
-  
+
   // std::cout << "CrabingProtocalFetchPage after" << std::endl;
   BPlusTreePage *res = reinterpret_cast<BPlusTreePage *>(page->GetData());
 
